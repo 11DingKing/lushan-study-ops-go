@@ -140,7 +140,6 @@ func (s *Store) ReleaseResources(ctx context.Context, cohortID string) error {
 }
 
 func (s *Store) SwapVenueHold(ctx context.Context, planItemID, fromVenueID, toVenueID string, expectedVersion int, at time.Time) error {
-	ctx = context.WithoutCancel(ctx)
 	result, err := s.executor().ExecContext(ctx, `UPDATE venue_holds SET venue_id = ?, version = version + 1
         WHERE plan_item_id = ? AND venue_id = ? AND version = ? AND status = 'confirmed' AND expires_at > ?`,
 		toVenueID, planItemID, fromVenueID, expectedVersion, formatTime(at))

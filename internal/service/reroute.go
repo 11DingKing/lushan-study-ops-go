@@ -11,13 +11,6 @@ import (
 	"github.com/11DingKing/lushan-study-ops-go/internal/security"
 )
 
-func reroutePersistenceContext(ctx context.Context) context.Context {
-	if ctx == nil {
-		return context.Background()
-	}
-	return context.WithoutCancel(ctx)
-}
-
 func (s *Service) Reroute(ctx context.Context, principal domain.Principal, cohortID, planItemID, toVenueID, reason string) (domain.Reroute, error) {
 	if err := principal.Require(domain.RoleOperator, domain.RoleSafety); err != nil {
 		return domain.Reroute{}, err
@@ -30,7 +23,7 @@ func (s *Service) Reroute(ctx context.Context, principal domain.Principal, cohor
 		return domain.Reroute{}, err
 	}
 	var reroute domain.Reroute
-	err = s.repo.Transact(reroutePersistenceContext(ctx), func(ctx context.Context, repo repository.Repository) error {
+	err = s.repo.Transact(ctx, func(ctx context.Context, repo repository.Repository) error {
 		cohort, err := repo.GetCohort(ctx, cohortID)
 		if err != nil {
 			return err

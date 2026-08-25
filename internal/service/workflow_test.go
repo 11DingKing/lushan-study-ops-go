@@ -260,6 +260,28 @@ func TestRerouteAtomicallySwapsOwnedVenue(t *testing.T) {
 	}
 }
 
+func TestRerouteHonorsCancelSignalAndKeepsConfirmedVenue(t *testing.T) {
+	fixture := setupWorkflow(t, true, true)
+	replacement := domain.Venue{ID: "replacement", Name: "Cloud observatory", Kind: "museum", Capacity: 40, Active: true}
+	if err := fixture.store.CreateVenue(fixture.ctx, replacement); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(fixture.ctx)
+	cancel()
+	_, err := fixture.service.Reroute(ctx, fixture.safety, fixture.cohort.ID,
+		fixture.plan.ID, replacement.ID, "thunderstorm warning")
+	if err == nil {
+		t.Fatal("reroute with canceled context succeeded")
+	}
+	hold, err := fixture.store.GetVenueHoldByPlanItem(fixture.ctx, fixture.plan.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if hold.VenueID != fixture.catalog.Venue.ID || hold.Status != domain.ResourceConfirmed {
+		t.Fatalf("confirmed venue was moved to backup venue = %+v", hold)
+	}
+}
+
 func TestCancellationReleasesResourcesAndCreatesSettlementJob(t *testing.T) {
 	fixture := setupWorkflow(t, true, true)
 	settlement, err := fixture.service.Cancel(fixture.ctx, fixture.leader, fixture.cohort.ID, "leader-cancel", 100000)
