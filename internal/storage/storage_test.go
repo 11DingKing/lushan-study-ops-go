@@ -280,3 +280,23 @@ func TestCanceledContextStopsRepositoryQuery(t *testing.T) {
 		t.Fatalf("ListCohorts(canceled) error = %v", err)
 	}
 }
+
+func TestCreateAttendanceGroupStopsOnCanceledContext(t *testing.T) {
+	fixture := setupResources(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	group := domain.AttendanceGroup{ID: "grp-canceled", CohortID: fixture.cohort.ID, Name: "Canceled route",
+		MentorID: fixture.mentorID, Capacity: 2, Version: 1}
+	err := fixture.store.CreateAttendanceGroup(ctx, group)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("CreateAttendanceGroup(canceled) error = %v", err)
+	}
+	var count int
+	if err := fixture.store.db.QueryRow(`SELECT COUNT(*) FROM attendance_groups WHERE cohort_id = ?`,
+		fixture.cohort.ID).Scan(&count); err != nil {
+		t.Fatal(err)
+	}
+	if count != 0 {
+		t.Fatalf("canceled request persisted %d attendance groups", count)
+	}
+}

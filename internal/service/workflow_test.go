@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -285,5 +286,36 @@ func TestCancellationReleasesResourcesAndCreatesSettlementJob(t *testing.T) {
 	}
 	if _, err := fixture.service.Cancel(fixture.ctx, fixture.leader, fixture.cohort.ID, "again", 100000); !apperr.IsCode(err, apperr.CodeConflict) {
 		t.Fatalf("repeat cancellation error = %v", err)
+	}
+}
+
+func TestCreateAttendanceGroupAbortsWhenRequestCanceled(t *testing.T) {
+	fixture := setupWorkflow(t, true, true)
+	ctx, cancel := context.WithCancel(fixture.ctx)
+	cancel()
+	_, err := fixture.service.CreateAttendanceGroup(ctx, fixture.safety, fixture.cohort.ID,
+		"Canceled group", fixture.catalog.MentorID, 5)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("canceled create error = %v", err)
+	}
+	_, getErr := fixture.store.GetAttendanceGroup(fixture.ctx, "grp-canceled")
+	if !apperr.IsCode(getErr, apperr.CodeNotFound) {
+		t.Fatalf("canceled request persisted a group: %v", getErr)
+	}
+}
+
+func TestCreateAttendanceGroupPersistsWhenRequestActive(t *testing.T) {
+	fixture := setupWorkflow(t, true, true)
+	group, err := fixture.service.CreateAttendanceGroup(fixture.ctx, fixture.safety, fixture.cohort.ID,
+		"Active group", fixture.catalog.MentorID, 5)
+	if err != nil {
+		t.Fatal(err)
+	}
+	persisted, err := fixture.store.GetAttendanceGroup(fixture.ctx, group.ID)
+	if err != nil {
+		t.Fatalf("active request did not persist group: %v", err)
+	}
+	if persisted.Name != "Active group" || persisted.Capacity != 5 {
+		t.Fatalf("persisted group = %+v", persisted)
 	}
 }

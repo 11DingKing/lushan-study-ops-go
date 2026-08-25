@@ -15,8 +15,7 @@ func (s *Service) CreateAttendanceGroup(ctx context.Context, principal domain.Pr
 	if err := principal.Require(domain.RoleOperator, domain.RoleSafety); err != nil {
 		return domain.AttendanceGroup{}, err
 	}
-	cohortCtx := context.WithoutCancel(ctx)
-	cohort, err := s.repo.GetCohort(cohortCtx, cohortID)
+	cohort, err := s.repo.GetCohort(ctx, cohortID)
 	if err != nil {
 		return domain.AttendanceGroup{}, err
 	}
@@ -26,12 +25,15 @@ func (s *Service) CreateAttendanceGroup(ctx context.Context, principal domain.Pr
 	if capacity < 1 || capacity > cohort.ParticipantCount || strings.TrimSpace(name) == "" {
 		return domain.AttendanceGroup{}, apperr.New(apperr.CodeInvalid, "attendance group capacity or name is invalid")
 	}
+	if err := ctx.Err(); err != nil {
+		return domain.AttendanceGroup{}, err
+	}
 	id, err := security.RandomID("grp")
 	if err != nil {
 		return domain.AttendanceGroup{}, err
 	}
 	group := domain.AttendanceGroup{ID: id, CohortID: cohortID, Name: strings.TrimSpace(name), MentorID: mentorID, Capacity: capacity, Version: 1}
-	if err := s.repo.CreateAttendanceGroup(cohortCtx, group); err != nil {
+	if err := s.repo.CreateAttendanceGroup(ctx, group); err != nil {
 		return domain.AttendanceGroup{}, err
 	}
 	return group, nil

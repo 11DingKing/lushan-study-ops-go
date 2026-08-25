@@ -28,7 +28,6 @@ func (s *Store) CountAcknowledgements(ctx context.Context, cohortID string, revi
 }
 
 func (s *Store) CreateAttendanceGroup(ctx context.Context, group domain.AttendanceGroup) error {
-	ctx = context.WithoutCancel(ctx)
 	_, err := s.executor().ExecContext(ctx, `INSERT INTO attendance_groups
         (id, cohort_id, name, mentor_id, capacity, version) VALUES (?, ?, ?, ?, ?, ?)`,
 		group.ID, group.CohortID, group.Name, group.MentorID, group.Capacity, group.Version)
