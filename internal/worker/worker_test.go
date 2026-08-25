@@ -195,6 +195,77 @@ func TestProcessOneReturnsIdleWhenQueueIsEmpty(t *testing.T) {
 	}
 }
 
+func TestProcessOneCanceledHandlerKeepsJobRunningForStaleRecovery(t *testing.T) {
+	worker, store, clk := workerFixture(t)
+	createJob(t, store, clk, "job-canceled", "notice", 3)
+	engaged := make(chan struct{})
+	worker.Register("notice", HandlerFunc(func(ctx context.Context, job domain.OutboxJob) error {
+		close(engaged)
+		<-ctx.Done()
+		return ctx.Err()
+	}))
+
+	runCtx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	done := make(chan struct{})
+	go func() {
+		_, _ = worker.ProcessOne(runCtx)
+		close(done)
+	}()
+	<-engaged
+	cancel()
+	<-done
+
+	job, err := store.GetJob(context.Background(), "job-canceled")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if job.Status != domain.JobRunning || job.Attempts != 1 || job.LockedAt == nil {
+		t.Fatalf("canceled job should remain running-locked, got %+v", job)
+	}
+	if job.LastError != "" {
+		t.Fatalf("canceled job should have no last_error, got %q", job.LastError)
+	}
+
+	worked, err := worker.ProcessOne(context.Background())
+	if err != nil || worked {
+		t.Fatalf("running job must not be re-claimed before stale, worked/error = %v/%v", worked, err)
+	}
+	clk.Advance(time.Second)
+	worked, err = worker.ProcessOne(context.Background())
+	if err != nil || worked {
+		t.Fatalf("still-not-stale job must not be re-claimed, worked/error = %v/%v", worked, err)
+	}
+
+	handled := 0
+	worker.Register("notice", HandlerFunc(func(ctx context.Context, job domain.OutboxJob) error {
+		handled++
+		return nil
+	}))
+	clk.Advance(worker.staleAfter)
+	if recovered, rErr := store.RecoverStaleJobs(context.Background(), clk.Now().Add(-worker.staleAfter), clk.Now()); rErr != nil || recovered != 1 {
+		t.Fatalf("RecoverStaleJobs = %d, %v", recovered, rErr)
+	}
+	job, err = store.GetJob(context.Background(), "job-canceled")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if job.Status != domain.JobRetry {
+		t.Fatalf("stale recovered job = %+v", job)
+	}
+	worked, err = worker.ProcessOne(context.Background())
+	if !worked || err != nil || handled != 1 {
+		t.Fatalf("recovered retry worked/handled/error = %v/%d/%v", worked, handled, err)
+	}
+	job, err = store.GetJob(context.Background(), "job-canceled")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if job.Status != domain.JobSucceeded {
+		t.Fatalf("re-handled job = %+v", job)
+	}
+}
+
 func TestRegisterRejectsIncompleteHandlerDefinition(t *testing.T) {
 	worker, _, _ := workerFixture(t)
 	for _, test := range []struct {

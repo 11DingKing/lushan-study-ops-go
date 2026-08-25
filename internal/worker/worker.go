@@ -104,7 +104,18 @@ func (w *Worker) ProcessOne(ctx context.Context) (bool, error) {
 	}
 	jobCtx, cancel := context.WithTimeout(ctx, w.jobTimeout)
 	defer cancel()
-	if err := handler.Handle(jobCtx, job); err != nil {
+	err = handler.Handle(jobCtx, job)
+	// Cancellation means the owning run is shutting down, not that the job has
+	// failed. We cannot tell whether the handler already produced its side
+	// effect (e.g. sent the notification), so re-queueing it immediately for a
+	// fresh retry would risk duplicate fulfillment. Leave the job in the
+	// "running" (locked) state and let the existing stale-job recovery path
+	// reclaim it after the grace period, exactly as if the worker had crashed
+	// mid-flight. Returning ctx.Err() here unwinds Run()'s shutdown sequence.
+	if ctx.Err() != nil || errors.Is(err, context.Canceled) {
+		return true, ctx.Err()
+	}
+	if err != nil {
 		return true, w.fail(ctx, job, err)
 	}
 	if err := w.repo.CompleteJob(ctx, job.ID, w.clock.Now()); err != nil {
