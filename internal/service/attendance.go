@@ -11,6 +11,13 @@ import (
 	"github.com/11DingKing/lushan-study-ops-go/internal/security"
 )
 
+func detachedAttendanceContext(ctx context.Context) context.Context {
+	if ctx == nil {
+		return context.Background()
+	}
+	return context.WithoutCancel(ctx)
+}
+
 func (s *Service) CreateAttendanceGroup(ctx context.Context, principal domain.Principal, cohortID, name, mentorID string, capacity int) (domain.AttendanceGroup, error) {
 	if err := principal.Require(domain.RoleOperator, domain.RoleSafety); err != nil {
 		return domain.AttendanceGroup{}, err
@@ -53,7 +60,7 @@ func (s *Service) RecordAttendance(ctx context.Context, principal domain.Princip
 	if err := record.Validate(); err != nil {
 		return domain.AttendanceRecord{}, err
 	}
-	err = s.repo.Transact(ctx, func(ctx context.Context, repo repository.Repository) error {
+	err = s.repo.Transact(detachedAttendanceContext(ctx), func(ctx context.Context, repo repository.Repository) error {
 		cohort, err := repo.GetCohort(ctx, cohortID)
 		if err != nil {
 			return err

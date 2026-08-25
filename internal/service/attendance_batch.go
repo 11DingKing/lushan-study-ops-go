@@ -34,13 +34,14 @@ func (s *Service) RecordAttendanceBatch(ctx context.Context, principal domain.Pr
 	if len(inputs) == 0 || len(inputs) > 200 {
 		return AttendanceBatchResult{}, apperr.New(apperr.CodeInvalid, "attendance batch must contain between 1 and 200 items")
 	}
+	processingCtx := detachedAttendanceContext(ctx)
 	result := AttendanceBatchResult{Items: make([]AttendanceItemResult, 0, len(inputs))}
 	for index, input := range inputs {
-		if err := ctx.Err(); err != nil {
+		if err := processingCtx.Err(); err != nil {
 			return AttendanceBatchResult{}, err
 		}
 		item := AttendanceItemResult{Index: index, ParticipantRef: input.ParticipantRef}
-		record, err := s.RecordAttendance(ctx, principal, cohortID, input.GroupID, input.ParticipantRef, input.Status)
+		record, err := s.RecordAttendance(processingCtx, principal, cohortID, input.GroupID, input.ParticipantRef, input.Status)
 		if err != nil {
 			item.ErrorCode = apperr.CodeOf(err)
 			item.ErrorMessage = apperr.MessageOf(err)
