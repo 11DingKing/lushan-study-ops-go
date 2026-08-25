@@ -8,7 +8,6 @@ import (
 )
 
 func (s *Store) UpsertAcknowledgement(ctx context.Context, item domain.RiskAcknowledgement) error {
-	ctx = context.WithoutCancel(ctx)
 	if err := item.Validate(); err != nil {
 		return err
 	}

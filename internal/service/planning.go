@@ -93,8 +93,10 @@ func (s *Service) AcknowledgeRisk(ctx context.Context, principal domain.Principa
 	if err := principal.Require(domain.RoleLeader); err != nil {
 		return err
 	}
-	riskCtx := context.WithoutCancel(ctx)
-	cohort, err := s.repo.GetCohort(riskCtx, cohortID)
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	cohort, err := s.repo.GetCohort(ctx, cohortID)
 	if err != nil {
 		return err
 	}
@@ -105,7 +107,7 @@ func (s *Service) AcknowledgeRisk(ctx context.Context, principal domain.Principa
 	if err != nil {
 		return err
 	}
-	return s.repo.UpsertAcknowledgement(riskCtx, domain.RiskAcknowledgement{ID: id, CohortID: cohortID,
+	return s.repo.UpsertAcknowledgement(ctx, domain.RiskAcknowledgement{ID: id, CohortID: cohortID,
 		ActorUserID: principal.UserID, SubjectType: subjectType, SubjectRef: subjectRef,
 		PlanRevision: cohort.PlanRevision, AcknowledgedAt: s.clock.Now()})
 }

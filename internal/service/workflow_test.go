@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -123,6 +124,29 @@ func TestConfirmationRequiresCurrentRiskAcknowledgement(t *testing.T) {
 	}
 	if hold.Status != domain.ResourceHeld {
 		t.Fatalf("hold changed to %s", hold.Status)
+	}
+}
+
+func TestRiskAcknowledgementRespectsCancellation(t *testing.T) {
+	fixture := setupWorkflow(t, false, false)
+
+	ctx, cancel := context.WithCancel(fixture.ctx)
+	cancel()
+	err := fixture.service.AcknowledgeRisk(ctx, fixture.leader, fixture.cohort.ID, "route", "revision-1")
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("AcknowledgeRisk(canceled) error = %v, want context.Canceled", err)
+	}
+
+	ackCount, err := fixture.store.CountAcknowledgements(fixture.ctx, fixture.cohort.ID, fixture.plan.Revision)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ackCount != 0 {
+		t.Fatalf("acknowledgement persisted after cancellation: count = %d", ackCount)
+	}
+	// A subsequent confirmation must still see the risk as unacknowledged.
+	if err := fixture.service.Confirm(fixture.ctx, fixture.operator, fixture.cohort.ID); !apperr.IsCode(err, apperr.CodeConflict) {
+		t.Fatalf("Confirm() after canceled acknowledgement error = %v, want conflict", err)
 	}
 }
 
