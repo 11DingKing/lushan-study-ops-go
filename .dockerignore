@@ -1,0 +1,11 @@
+.git
+.github
+.gomark-authoring
+.data
+.cache
+*.db
+*.db-shm
+*.db-wal
+bin
+coverage.out
+.env
